@@ -1,3 +1,4 @@
+import '../lib/install';
 import {createRoot} from 'react-dom/client';
 import Home from './page';
 import Monitoring from './monitoring';

@@ -1,1 +1,27 @@
-{"id":"/majma-alhafhaf/","name":"مجمع الهفهاف","short_name":"الهفهاف","lang":"ar","dir":"rtl","start_url":"/majma-alhafhaf/?app=1","scope":"/majma-alhafhaf/","display":"standalone","background_color":"#101723","theme_color":"#101723","description":"دفتر الزبائن والمخزون والديون لمجمع الهفهاف","icons":[{"src":"app-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}
+{
+  "id": "/majma-alhafhaf/",
+  "name": "مجمع الهفهاف",
+  "short_name": "الهفهاف",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/majma-alhafhaf/?app=1",
+  "scope": "/majma-alhafhaf/",
+  "display": "standalone",
+  "background_color": "#101723",
+  "theme_color": "#101723",
+  "description": "دفتر الزبائن والمخزون والديون لمجمع الهفهاف",
+  "icons": [
+    {
+      "src": "app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

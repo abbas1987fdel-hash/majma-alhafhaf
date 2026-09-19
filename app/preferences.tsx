@@ -2,7 +2,8 @@
 import BrandImage from './brand-image';
 import { InventoryPasswordSettings } from './inventory-access';
 import { useCloud, friendlyError } from './cloud';
-import { useEffect, useState, type SyntheticEvent } from 'react';
+import { useEffect, useState, useSyncExternalStore, type SyntheticEvent } from 'react';
+import { installation } from '@/lib/install';
 import {
   Download,
   LockKeyhole,
@@ -16,55 +17,32 @@ import {
   validPin,
 } from '@/lib/preferences';
 export const defaultLogo = () => `${import.meta.env.BASE_URL}brand.png`;
-type InstallEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: string }>;
-};
+const noInstall = { available: false, installed: false, busy: false };
 export function InstallApp() {
-  const [prompt, setPrompt] = useState<InstallEvent | null>(null),
-    [help, setHelp] = useState(false);
-  useEffect(() => {
-    const capture = (event: Event) => {
-        event.preventDefault();
-        setPrompt(event as InstallEvent);
-      },
-      installed = () => {
-        setPrompt(null);
-        setHelp(false);
-      };
-    window.addEventListener('beforeinstallprompt', capture);
-    window.addEventListener('appinstalled', installed);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', capture);
-      window.removeEventListener('appinstalled', installed);
-    };
-  }, []);
+  const status = useSyncExternalStore(installation?.subscribe ?? (() => () => {}), installation?.getSnapshot ?? (() => noInstall), () => noInstall);
+  const [message, setMessage] = useState('');
   async function install() {
-    if (!prompt) {
-      setHelp(true);
-      return;
+    try {
+      const result = await installation?.install();
+      if (result === 'accepted') setMessage('تم قبول طلب التثبيت. أكمل خطوات المتصفح إن ظهرت.');
+      else if (result === 'dismissed') setMessage('تم إلغاء طلب التثبيت. يمكنك تثبيته لاحقًا من قائمة المتصفح.');
+      else if (result === 'installed') setMessage('التطبيق يعمل الآن بوضع التطبيق المثبّت.');
+      else if (result !== 'busy') setMessage('المتصفح لم يوفّر نافذة التثبيت هنا. افتح الرابط في Edge، ثم من القائمة ⋯ اختر التطبيقات ← تثبيت هذا الموقع كتطبيق. على iPhone استخدم Safari ← مشاركة ← إضافة إلى الشاشة الرئيسية. إن كان التطبيق مثبتًا افتحه من أيقونته.');
+    } catch {
+      setMessage('تعذّر فتح طلب التثبيت. افتح الرابط في Edge وثبّته من قائمة التطبيقات.');
     }
-    await prompt.prompt();
-    await prompt.userChoice;
-    setPrompt(null);
   }
   return (
     <div className="install-app">
       <button
         type="button"
         className="soft save"
+        disabled={status.busy || status.installed}
         onClick={() => void install()}
       >
-        <Download size={18} /> تثبيت التطبيق
+        <Download size={18} /> {status.installed ? 'التطبيق مثبّت' : status.busy ? 'جارٍ فتح نافذة التثبيت…' : 'تثبيت التطبيق'}
       </button>
-      {help && (
-        <p className="install-help">
-          من قائمة المتصفح اختر «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية».
-          على iPhone افتح الموقع في Safari ثم «مشاركة» ← «إضافة إلى الشاشة
-          الرئيسية». إذا كان مثبتًا بالفعل افتحه من أيقونته.
-        </p>
-      )}
+      {message && <output className="install-help" style={{ display: 'block' }}>{message}</output>}
     </div>
   );
 }
