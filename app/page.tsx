@@ -347,16 +347,19 @@ function LedgerApp() {
       action: () => prefs.remove({ token: prefs.token, kind: 'transaction', id: t.id, expectedVersion: t.version }),
     });
   }
-  function shareTotalDebt() {
+  async function shareTotalDebt() {
     if (!customer) return;
     const url = debtShareUrl(prefs.name, prefs.intro, customer, debt);
     if (!url) { notify('رقم واتساب الزبون غير صالح. عدّل الرقم أولًا.'); return; }
-    window.open(url, '_blank', 'noopener,noreferrer');
+    await shareMessage(new URL(url).searchParams.get('text') || '', url);
   }
   async function share(t: Transaction) {
     if (!customer) return;
-    setShareFallback('');
     const text = whatsappText(prefs.name, prefs.intro, customer.name, t, debt);
+    await shareMessage(text, 'https://wa.me/' + phoneNumber(customer.phone) + '?text=' + encodeURIComponent(text));
+  }
+  async function shareMessage(text: string, url: string) {
+    setShareFallback('');
     if (prefs.logoFile && navigator.canShare?.({ files: [prefs.logoFile] })) {
       try {
         await navigator.share({
@@ -367,24 +370,12 @@ function LedgerApp() {
         return;
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') return;
-        setShareFallback(
-          'https://wa.me/' +
-            phoneNumber(customer.phone) +
-            '?text=' +
-            encodeURIComponent(text),
-        );
+        setShareFallback(url);
         notify('تعذّرت مشاركة الصورة. يمكنك مشاركة الرسالة النصية.');
         return;
       }
     }
-    window.open(
-      'https://wa.me/' +
-        phoneNumber(customer.phone) +
-        '?text=' +
-        encodeURIComponent(text),
-      '_blank',
-      'noopener,noreferrer',
-    );
+    window.open(url, '_blank', 'noopener,noreferrer');
   }
   const empty = (
     icon: ReactNode,
@@ -539,7 +530,7 @@ function LedgerApp() {
         <div className="preview-note">
           <span /> {busy ? 'جارٍ الحفظ على الجهاز…' : prefs.syncBusy ? 'جارٍ مزامنة التعديلات…' : prefs.pending ? `محفوظ على الجهاز · ${prefs.pending} تعديلات بانتظار المزامنة` : prefs.connected ? prefs.inventoryUnchecked ? 'متصل · افتح المخزون للتحقق من مزامنته' : 'متصل · تمت المزامنة' : 'أوفلاين · محفوظ على هذا الجهاز'}
         </div>
-        {customer && tab === 'sales' && <button type="button" className="share-total-debt" onClick={shareTotalDebt} disabled={!prefs.connected || busy}><WhatsApp /><span>مشاركة الدين الكلي</span></button>}
+        {customer && tab === 'sales' && <button type="button" className="share-total-debt" onClick={() => void shareTotalDebt()} disabled={!prefs.connected || busy}><WhatsApp /><span>مشاركة الدين الكلي</span></button>}
         {tab === 'inventory' && prefs.inventory && <div className="inventory-count"><Package size={18} /><span>عدد المواد</span><strong>{money(products.length)}</strong></div>}
         </div>
         <SyncStatus />
