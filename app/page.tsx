@@ -1,5 +1,8 @@
 'use client';
 import BrandImage from './brand-image';
+import { SyncStatus } from './sync-status';
+import { InventoryGate } from './inventory-access';
+import { debtShareUrl } from '@/lib/debt-share';
 import { CloudProvider, useCloud, friendlyError } from './cloud';
 import { useState, useEffect, type ReactNode } from 'react';
 import {
@@ -45,6 +48,7 @@ import {
   balance,
   validLedger,
   matchesName,
+  compareArabicNames,
   normalize,
   phoneNumber,
   type Transaction,
@@ -132,17 +136,18 @@ export default function Home() {
 }
 function ConnectedApp() {
   const cloud = useCloud();
-  if (!cloud.token || cloud.data === null) return <Welcome name={cloud.name} logo={cloud.logo} onEnter={cloud.login} />;
+  if (!cloud.token || cloud.data === null) return <Welcome name={cloud.name} logo={cloud.logo} onEnter={cloud.login} onLocal={cloud.loginLocal} />;
   if (!cloud.data) return <main className="welcome"><section className="settings-card" aria-live="polite"><h2>جارٍ فتح حساباتك…</h2><p>{cloud.connected ? 'نقرأ البيانات المحفوظة.' : 'بانتظار الاتصال بالإنترنت.'}</p><button className="soft" onClick={() => void cloud.lock()}>العودة للدخول</button></section></main>;
-  return <LedgerApp key={cloud.token} />;
+  return <LedgerApp />;
 }
 function LedgerApp() {
   const prefs = useAppPreferences();
-  const { customers, products, transactions } = prefs.data!;
+  const { customers, transactions } = prefs.data!;
+  const products = prefs.inventory?.products ?? [];
   const [busy, setBusy] = useState(false);
   async function persist(action: () => Promise<unknown>, completed: () => void, inForm = true) {
     if (busy) return;
-    if (!prefs.connected) { (inForm ? setError : setNotice)('الاتصال منقطع. انتظر عودة الإنترنت قبل الحفظ.'); return; }
+    if (!prefs.canWrite) { (inForm ? setError : setNotice)('انتظر المزامنة أو راجع التنبيه الظاهر قبل الحفظ.'); return; }
     setBusy(true);
     try { await action(); completed(); }
     catch (error) { (inForm ? setError : setNotice)(friendlyError(error)); }
@@ -168,7 +173,7 @@ function LedgerApp() {
   const [inventorySearch, setInventorySearch] = useState('');
   const filteredProducts = products.filter((p) =>
     matchesName(p.name, inventorySearch),
-  );
+  ).sort(compareArabicNames);
   const [search, setSearch] = useState(''),
     [selected, setSelected] = useState<string | null>(null),
     [form, setForm] = useState<FormState | null>(null),
@@ -189,7 +194,7 @@ function LedgerApp() {
   const customer = customers.find((c) => c.id === selected),
     ledger = transactions.filter((t) => t.customer === selected),
     debt = balance(ledger),
-    filtered = customers.filter((c) => matchesName(c.name, search));
+    filtered = customers.filter((c) => matchesName(c.name, search)).sort(compareArabicNames);
   const overdueCustomers = customers
     .map((c) => ({
       customer: c,
@@ -209,6 +214,7 @@ function LedgerApp() {
       setForm(f);
     };
   function changeTab(v: unknown) {
+    if (String(v) !== tab && !prefs.lockInventory()) return;
     setTab(String(v));
     setSearch('');
     setInventorySearch('');
@@ -255,7 +261,7 @@ function LedgerApp() {
         setError('أدخل أعدادًا صحيحة موجبة أو صفرًا');
         return;
       }
-      await persist(() => prefs.saveProduct({ token: prefs.token, product: p, expectedVersion: form.version }), () => { setForm(null); setNotice(''); });
+      await persist(() => prefs.saveProduct({ token: prefs.token, inventoryToken: prefs.inventoryToken, product: p, expectedVersion: form.version }), () => { setForm(null); setNotice(''); });
     }
   }
   function deleteCustomer(c: Customer) {
@@ -340,6 +346,12 @@ function LedgerApp() {
       text: 'حذف المعاملة وإعادة حساب رصيد الزبون؟',
       action: () => prefs.remove({ token: prefs.token, kind: 'transaction', id: t.id, expectedVersion: t.version }),
     });
+  }
+  function shareTotalDebt() {
+    if (!customer) return;
+    const url = debtShareUrl(prefs.name, prefs.intro, customer, debt);
+    if (!url) { notify('رقم واتساب الزبون غير صالح. عدّل الرقم أولًا.'); return; }
+    window.open(url, '_blank', 'noopener,noreferrer');
   }
   async function share(t: Transaction) {
     if (!customer) return;
@@ -523,9 +535,14 @@ function LedgerApp() {
             </IconButton>
           </div>
         )}
+        <div className="account-status-row">
         <div className="preview-note">
-          <span /> {busy ? 'جارٍ حفظ التعديل…' : prefs.connected ? 'متصل · البيانات محفوظة في قاعدة البيانات' : 'الاتصال منقطع · انتظر عودة الإنترنت قبل الحفظ'}
+          <span /> {busy ? 'جارٍ الحفظ على الجهاز…' : prefs.syncBusy ? 'جارٍ مزامنة التعديلات…' : prefs.pending ? `محفوظ على الجهاز · ${prefs.pending} تعديلات بانتظار المزامنة` : prefs.connected ? prefs.inventoryUnchecked ? 'متصل · افتح المخزون للتحقق من مزامنته' : 'متصل · تمت المزامنة' : 'أوفلاين · محفوظ على هذا الجهاز'}
         </div>
+        {customer && tab === 'sales' && <button type="button" className="share-total-debt" onClick={shareTotalDebt} disabled={!prefs.connected || busy}><WhatsApp /><span>مشاركة الدين الكلي</span></button>}
+        {tab === 'inventory' && prefs.inventory && <div className="inventory-count"><Package size={18} /><span>عدد المواد</span><strong>{money(products.length)}</strong></div>}
+        </div>
+        <SyncStatus />
         <Tabs value={tab} onValueChange={changeTab}>
           <TabsContent value="customers">
             <section className="summary">
@@ -572,6 +589,10 @@ function LedgerApp() {
                 )}
           </TabsContent>
           <TabsContent value="inventory">
+            {!prefs.inventory ? (
+              prefs.inventoryToken && prefs.inventory === undefined ? <p className="inventory-loading" aria-live="polite">جارٍ تحميل المخزون…</p> :
+              <InventoryGate unlock={prefs.unlockInventory} unlockLocal={prefs.unlockInventoryLocal} cancel={() => changeTab('customers')} connected={true} />
+            ) : <>
             <div className="section-heading">
               <div>
                 <span className="eyebrow blue">كل شيء في مكانه</span>
@@ -643,7 +664,7 @@ function LedgerApp() {
                         onClick={() =>
                           setConfirm({
                             text: `حذف مادة «${p.name}»؟`,
-                            action: () => prefs.remove({ token: prefs.token, kind: 'product', id: p.id, expectedVersion: p.version }),
+                            action: () => prefs.remove({ token: prefs.token, kind: 'product', inventoryToken: prefs.inventoryToken, id: p.id, expectedVersion: p.version }),
                           })
                         }
                       >
@@ -692,6 +713,7 @@ function LedgerApp() {
                   ? 'جرّب كتابة بداية اسم مادة أخرى.'
                   : 'أضف المواد مباشرة مع أسعارها وكمياتها.',
               )}
+            </>}
           </TabsContent>
           <TabsContent value="sales">
             {!customer ? (
@@ -906,7 +928,7 @@ function LedgerApp() {
                           ? 'payment-btn'
                           : 'debt-btn') + ' save'
                       }
-                      disabled={busy || !prefs.connected} type="submit"
+                      disabled={busy || !prefs.canWrite} type="submit"
                     >
                       <Check size={19} /> حفظ المعاملة
                     </button>
@@ -1145,7 +1167,7 @@ function LedgerApp() {
         </Tabs>
       </main>
       <Dialog
-        open={!!form}
+        open={!!form && (form.kind !== 'product' || !!prefs.inventory)}
         onOpenChange={(v) => {
           if (!v) setForm(null);
         }}
@@ -1228,7 +1250,7 @@ function LedgerApp() {
                   {error}
                 </p>
               )}
-              <button disabled={busy || !prefs.connected} type="submit" className="primary save">
+              <button disabled={busy || !prefs.canWrite} type="submit" className="primary save">
                 <Check size={19} /> حفظ
               </button>
             </form>
@@ -1248,7 +1270,7 @@ function LedgerApp() {
           <div className="account-actions">
             <button
               className="delete-btn"
-              disabled={busy || !prefs.connected}
+              disabled={busy || !prefs.canWrite}
               onClick={() => {
                 if (confirm) void persist(confirm.action, () => { setConfirm(null); setNotice(''); }, false);
               }}

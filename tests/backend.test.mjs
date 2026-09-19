@@ -3,6 +3,7 @@ import { convexTest } from 'convex-test';
 import schema from '../convex/schema';
 import { api, internal } from '../convex/_generated/api';
 const modules = import.meta.glob('../convex/**/*.ts');
+const inventoryPassword = 'test-stock-8642';
 const pin = '7392'; // Independent test credential; never used by the deployed application.
 const customer = { id: 'customer-0001', name: 'علي حسن ياسر', phone: '07701234567', notes: '' };
 const debt = { id: 'debt-0000001', customer: customer.id, type: 'debt', items: [{ name: 'حنفية', price: 2000 }], amount: 2000, date: '1900-01-01T00:00:00Z', dueDate: '2026-09-01' };
@@ -15,6 +16,7 @@ async function setup() {
 }
 beforeEach(() => {
   vi.stubEnv('INITIAL_PIN', pin);
+  vi.stubEnv('INITIAL_INVENTORY_PASSWORD', inventoryPassword);
   vi.stubEnv('APP_ORIGIN', 'https://customer.example');
   vi.stubEnv('CONVEX_SITE_URL', 'https://test.convex.site');
 });
@@ -78,10 +80,12 @@ describe('authenticated durable ledger', () => {
   });
   it('validates inventory and date bounds on the server', async () => {
     const { t, token } = await setup();
+    await t.action(internal.auth.bootstrapInventory, {});
+    const { inventoryToken } = await t.action(api.auth.unlockInventory, { token, password: inventoryPassword });
     const product = { id: 'product-0001', name: 'أنبوب', buy: 1000, sell: 2000, quantity: 3, alert: 1 };
-    await t.mutation(api.shop.saveProduct, { token, product });
-    await expect(t.mutation(api.shop.saveProduct, { token, product: { ...product, quantity: -1 }, expectedVersion: 1 })).rejects.toThrow();
-    await expect(t.mutation(api.shop.saveProduct, { token, product: { ...product, sell: 0.5 }, expectedVersion: 1 })).rejects.toThrow();
+    await t.mutation(api.shop.saveProduct, { token, inventoryToken, product });
+    await expect(t.mutation(api.shop.saveProduct, { token, inventoryToken, product: { ...product, quantity: -1 }, expectedVersion: 1 })).rejects.toThrow();
+    await expect(t.mutation(api.shop.saveProduct, { token, inventoryToken, product: { ...product, sell: 0.5 }, expectedVersion: 1 })).rejects.toThrow();
     await t.mutation(api.shop.saveCustomer, { token, customer });
     await expect(t.mutation(api.shop.saveTransaction, { token, transaction: { ...debt, dueDate: '2026-02-30' } })).rejects.toThrow();
     await expect(t.mutation(api.shop.saveCustomer, { token, customer: { ...customer, phone: '0770' + ' '.repeat(100) + '1234567' }, expectedVersion: 1 })).rejects.toThrow();
@@ -140,5 +144,69 @@ describe('logo upload access', () => {
     expect((await t.query(api.shop.branding, {})).logo).toBeTruthy();
     const replay = await t.fetch(path, { method: 'POST', headers: { Origin: 'https://customer.example' }, body: bytes });
     expect(replay.status).toBe(400);
+  });
+});
+
+
+describe('independent inventory password', () => {
+  const product = { id: 'product-0001', name: 'أنبوب', buy: 1000, sell: 2000, quantity: 3, alert: 1 };
+  async function ready() {
+    const state = await setup();
+    await state.t.action(internal.auth.bootstrapInventory, {});
+    const unlocked = await state.t.action(api.auth.unlockInventory, { token: state.token, password: inventoryPassword });
+    return { ...state, ...unlocked };
+  }
+  it('fails closed before bootstrap and never returns products through the app snapshot', async () => {
+    const { t, token } = await setup();
+    await expect(t.action(api.auth.unlockInventory, { token, password: inventoryPassword })).rejects.toThrow('قيد التجهيز');
+    await t.run(ctx => ctx.db.insert('products', { ...product, version: 1 }));
+    expect((await t.query(api.shop.snapshot, { token })).products).toEqual([]);
+    expect(await t.query(api.shop.inventory, { token, inventoryToken: '' })).toBeNull();
+    await expect(t.mutation(api.shop.saveProduct, { token, inventoryToken: '', product })).rejects.toThrow();
+    await expect(t.mutation(api.shop.remove, { token, kind: 'product', id: product.id, expectedVersion: 1 })).rejects.toThrow();
+  });
+  it('unlocks only for the requesting app session and authorizes product CRUD', async () => {
+    const { t, token, inventoryToken } = await ready();
+    await expect(t.action(api.auth.unlockInventory, { token, password: 'wrong' })).rejects.toThrow('غير صحيحة');
+    await t.mutation(api.shop.saveProduct, { token, inventoryToken, product });
+    const data = await t.query(api.shop.inventory, { token, inventoryToken });
+    expect(data.products).toEqual([{ ...product, version: 1 }]);
+    expect(data.sessionExpires).toBe((await t.query(api.shop.snapshot, { token })).sessionExpires);
+    const other = await t.action(api.auth.login, { pin });
+    expect(await t.query(api.shop.inventory, { token: other.token, inventoryToken })).toBeNull();
+    await expect(t.mutation(api.shop.saveProduct, { token: other.token, inventoryToken, product, expectedVersion: 1 })).rejects.toThrow();
+    await t.mutation(api.shop.saveProduct, { token, inventoryToken, product: { ...product, quantity: 2 }, expectedVersion: 1 });
+    await t.mutation(api.shop.remove, { token, inventoryToken, kind: 'product', id: product.id, expectedVersion: 2 });
+    expect((await t.query(api.shop.inventory, { token, inventoryToken })).products).toEqual([]);
+    await t.mutation(api.shop.logout, { token });
+    expect(await t.query(api.shop.inventory, { token, inventoryToken })).toBeNull();
+  });
+  it('requires the old password and matching confirmation, revokes inventory sessions only, and cannot reset via bootstrap', async () => {
+    const { t, token, inventoryToken } = await ready();
+    const change = { token, currentPassword: inventoryPassword, newPassword: 'new-stock-9852', confirmation: 'new-stock-9852' };
+    await expect(t.action(api.auth.changeInventoryPassword, { ...change, currentPassword: 'wrong' })).rejects.toThrow('القديمة');
+    await expect(t.action(api.auth.changeInventoryPassword, { ...change, confirmation: 'different' })).rejects.toThrow('غير مطابق');
+    await expect(t.action(api.auth.changeInventoryPassword, { ...change, newPassword: 'abc', confirmation: 'abc' })).rejects.toThrow('4');
+    await t.action(api.auth.changeInventoryPassword, change);
+    expect(await t.query(api.shop.inventory, { token, inventoryToken })).toBeNull();
+    expect(await t.query(api.shop.snapshot, { token })).not.toBeNull();
+    expect(await t.action(internal.auth.bootstrapInventory, {})).toEqual({ initialized: false });
+    await expect(t.action(api.auth.unlockInventory, { token, password: inventoryPassword })).rejects.toThrow('غير صحيحة');
+    const again = await t.action(api.auth.unlockInventory, { token, password: change.newPassword });
+    expect(await t.query(api.shop.inventory, { token, ...again })).not.toBeNull();
+    expect(await t.action(api.auth.login, { pin })).toHaveProperty('token');
+  });
+  it('rate limits guessing across app sessions without blocking main login', async () => {
+    const { t, token } = await ready();
+    for (let i = 0; i < 5; i++) await expect(t.action(api.auth.unlockInventory, { token, password: 'wrong' })).rejects.toThrow('غير صحيحة');
+    const other = await t.action(api.auth.login, { pin });
+    await expect(t.action(api.auth.unlockInventory, { token: other.token, password: inventoryPassword })).rejects.toThrow('محاولات كثيرة');
+    await expect(t.action(api.auth.changeInventoryPassword, { token, currentPassword: inventoryPassword, newPassword: 'changed', confirmation: 'changed' })).rejects.toThrow('محاولات كثيرة');
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 16 * 60_000);
+    const again = await t.action(api.auth.unlockInventory, { token, password: inventoryPassword });
+    expect(await t.query(api.shop.inventory, { token, ...again })).not.toBeNull();
+    vi.setSystemTime(Date.now() + 13 * 60 * 60_000);
+    expect(await t.query(api.shop.inventory, { token, ...again })).toBeNull();
   });
 });

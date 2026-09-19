@@ -1643,3 +1643,25 @@ label textarea {
     margin-right: 0;
   }
 }
+.account-status-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.account-status-row .preview-note { flex: 1; min-width: 160px; padding: 14px 0; }
+.account-status-row .preview-note > span { flex-shrink: 0; }
+.share-total-debt { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid #168858; background: #e8f8ef; color: #14663f; border-radius: 12px; min-height: 42px; padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.share-total-debt svg { flex-shrink: 0; }
+.share-total-debt:disabled { opacity: .5; cursor: wait; }
+.dark .share-total-debt { background: #123d30; color: #9ce9bc; border-color: #28765a; }
+.inventory-gate { text-align: right; }
+.inventory-lock-icon { display: flex; align-items: center; justify-content: center; gap: 7px; width: 76px; height: 68px; border-radius: 22px; color: #3476f4; background: #edf3ff; margin: 4px auto 12px; }
+.dark .inventory-lock-icon { color: #92bbff; background: #243750; }
+.inventory-password-form { margin-top: 20px; }
+.inventory-loading { text-align: center; padding: 60px 12px; }
+.inventory-count { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 8px 12px; border-radius: 12px; color: #245cad; background: #edf3ff; border: 1px solid #d5e3f9; font-size: 13px; }
+.inventory-count strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.dark .inventory-count { background: #1d304a; border-color: #334d70; color: #b4d1ff; }
+
+.sync-status { margin: 0 0 20px; padding: 14px 16px; border: 1px solid #b7c8da; border-radius: 16px; background: #edf4fb; color: #243b55; font-size: 12px; line-height: 1.9; }
+.sync-status p { margin: 0 0 8px; }
+.sync-status input { display: block; width: 100%; padding: 10px; margin: 6px 0 10px; border: 1px solid #708399; border-radius: 10px; }
+.sync-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.dark .sync-status { background: #182637; border-color: #38516b; color: #d2e5f8; }
+.dark .sync-status input { background: #101723; color: #f1f5f9; }

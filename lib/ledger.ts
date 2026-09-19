@@ -83,3 +83,8 @@ export function matchesName(name: string, query: string) {
     words.slice(index).join(' ').startsWith(search),
   );
 }
+
+const arabicNameOrder = new Intl.Collator('ar', { numeric: true, sensitivity: 'base', ignorePunctuation: true });
+export function compareArabicNames(a: { name: string }, b: { name: string }) {
+  return arabicNameOrder.compare(normalize(a.name).trim(), normalize(b.name).trim());
+}

@@ -19,6 +19,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: node --test tests/offline-shell.test.mjs
       - run: npx vitest run --config tests/backend.test.config.mjs
       - run: npx tsc --noEmit
       - run: npx oxlint app lib/ledger.ts lib/preferences.ts convex tests/backend.test.mjs vite.pages.config.ts

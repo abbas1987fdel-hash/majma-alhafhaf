@@ -20,7 +20,34 @@
     />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="startup" role="status" style="min-height:100vh;box-sizing:border-box;display:grid;place-content:center;gap:16px;text-align:center;padding:24px;background:#101723;color:#f8fafc;font:18px system-ui,sans-serif">
+        <strong style="font-size:28px">مجمع الهفهاف</strong>
+        <p id="startup-message">جارٍ فتح دفتر الديون…</p>
+        <button id="startup-retry" hidden onclick="location.reload()" style="padding:14px 24px;border:1px solid #93c5fd;border-radius:14px;background:#1e3a5f;color:white;font:inherit">إعادة المحاولة</button>
+        <noscript>يرجى تفعيل JavaScript لفتح التطبيق.</noscript>
+      </div>
+    </div>
+    <script>
+      (() => {
+        function showFailure() {
+          const message = document.getElementById('startup-message');
+          const retry = document.getElementById('startup-retry');
+          if (!message || !retry) return;
+          message.textContent = 'تعذّر فتح التطبيق. اتصل بالإنترنت عند الفتح الأول، ثم أعد المحاولة.';
+          retry.hidden = false;
+        }
+        const timeout = setTimeout(showFailure, 15000);
+        function handleFailure() { showFailure(); }
+        window.addEventListener('error', handleFailure, true);
+        window.addEventListener('unhandledrejection', handleFailure);
+        window.addEventListener('hafhaf:ready', () => {
+          clearTimeout(timeout);
+          window.removeEventListener('error', handleFailure, true);
+          window.removeEventListener('unhandledrejection', handleFailure);
+        }, {once:true});
+      })();
+    </script>
     <script type="module" src="/app/pages-entry.tsx"></script>
   </body>
 </html>

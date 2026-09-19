@@ -1,5 +1,6 @@
 'use client';
 import BrandImage from './brand-image';
+import { InventoryPasswordSettings } from './inventory-access';
 import { useCloud, friendlyError } from './cloud';
 import { useEffect, useState, type SyntheticEvent } from 'react';
 import {
@@ -33,14 +34,7 @@ export function InstallApp() {
       };
     window.addEventListener('beforeinstallprompt', capture);
     window.addEventListener('appinstalled', installed);
-    if ('serviceWorker' in navigator && import.meta.env.PROD) {
-      navigator.serviceWorker
-        .register(`${import.meta.env.BASE_URL}sw.js`, {
-          scope: import.meta.env.BASE_URL,
-          updateViaCache: 'none',
-        })
-        .catch(() => setHelp(true));
-    }
+
     return () => {
       window.removeEventListener('beforeinstallprompt', capture);
       window.removeEventListener('appinstalled', installed);
@@ -62,7 +56,7 @@ export function InstallApp() {
         className="soft save"
         onClick={() => void install()}
       >
-        <Download size={18} /> تثبيت التطبيق على الهاتف
+        <Download size={18} /> تثبيت التطبيق
       </button>
       {help && (
         <p className="install-help">
@@ -74,8 +68,8 @@ export function InstallApp() {
     </div>
   );
 }
-export function Welcome({ name, logo, onEnter }: {
-  name: string; logo: string; onEnter: (pin: string) => Promise<void>;
+export function Welcome({ name, logo, onEnter, onLocal }: {
+  name: string; logo: string; onEnter: (pin: string) => Promise<void>; onLocal: (pin: string) => Promise<void>;
 }) {
   const [pin, setPin] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   async function enter(e: SyntheticEvent<HTMLFormElement>) {
@@ -97,7 +91,8 @@ export function Welcome({ name, logo, onEnter }: {
       <form onSubmit={enter}><label>رمز الدخول<input type="password" inputMode="numeric" autoComplete="off" maxLength={8} required value={pin} onChange={e => setPin(e.target.value)} /></label>
         {error && <p role="alert" className="error">{error}</p>}
         <button disabled={busy} className="primary save" type="submit">{busy ? 'جارٍ الفتح…' : 'دخول التطبيق'}<ArrowLeft size={19} /></button>
-      </form><InstallApp /><p className="session-note">بياناتك محفوظة في قاعدة البيانات. يلزم الاتصال بالإنترنت لفتح الحسابات وحفظ التعديلات.</p>
+        {error && <><button disabled={busy} className="soft save" type="button" onClick={async () => { setBusy(true); try { await onLocal(normalizePin(pin)); } catch (failure) { setError(friendlyError(failure)); } finally { setBusy(false); } }}>فتح النسخة المحفوظة</button><p className="settings-hint">إذا تغير الرمز من جهاز آخر: أدخل رمز هذه النسخة القديم وافتحها، ثم أدخل الرمز الجديد في طلب المزامنة.</p></>}
+      </form><InstallApp /><p className="session-note">بعد أول دخول بالإنترنت تُحفظ نسخة مشفّرة على هذا الجهاز للعمل بدون إنترنت. افتح المخزون مرة متصلًا لتجهيزه أيضًا. لا تمسح بيانات المتصفح قبل اكتمال المزامنة.</p>
     </div>
   </section></main>;
 }
@@ -284,10 +279,11 @@ export function SettingsPanel({ prefs }: { prefs: Prefs }) {
         <p className="settings-hint">
           تغيير الرمز يغلق الجلسات الأخرى. احتفظ بالرمز الجديد في مكان آمن.
         </p>
-        <button className="soft save" onClick={() => void prefs.lock()}>
+        <button className="soft save" disabled={prefs.syncBusy} onClick={() => void prefs.lock().catch(failure => setPinMessage(friendlyError(failure)))}>
           <LogOut size={18} /> قفل التطبيق
         </button>
       </section>
+      <InventoryPasswordSettings changePassword={prefs.changeInventoryPassword} connected={prefs.connected} />
       <section className="settings-card">
         <h3>التطبيق على هاتفك</h3>
         <InstallApp />

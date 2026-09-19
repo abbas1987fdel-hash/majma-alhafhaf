@@ -94,3 +94,15 @@ test('inventory search matches any word and preserves Arabic normalization', () 
   assert.equal(matchesName('عَلِي حسن ياسر', 'علي'), true);
   assert.equal(matchesName('حنفية ماء نحاس', 'حديد'), false);
 });
+
+import { compareArabicNames } from '../lib/ledger.ts';
+test('Arabic names sort alphabetically while ignoring alif forms and diacritics', () => {
+  const names=['ياسر','حسن','باسم','أحمد','تامر'].map(name=>({name}));
+  assert.deepEqual([...names].sort(compareArabicNames).map(x=>x.name),['أحمد','باسم','تامر','حسن','ياسر']);
+  assert.equal(names[0].name,'ياسر');
+  assert.equal(compareArabicNames({name:' إِبراهيم '},{name:'ابراهيم'}),0);
+});
+test('inventory names and search results retain Arabic alphabetical and numeric order', () => {
+  const products=['حنفية 10','أنبوب','برغي','حنفية 2'].map(name=>({name}));
+  assert.deepEqual(products.sort(compareArabicNames).map(x=>x.name),['أنبوب','برغي','حنفية 2','حنفية 10']);
+});

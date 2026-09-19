@@ -48,3 +48,52 @@ export const replacePin = internalMutation({
     if (limit) await ctx.db.delete(limit._id);
   },
 });
+
+// Inventory authorization is independent of the application's entry PIN.
+export const reserveInventory = internalMutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireSession(ctx, token);
+    const config = await settings(ctx);
+    if (!config.inventorySalt || !config.inventoryHash || config.inventoryVersion === undefined) throw new ConvexError('كلمة سر المخزن قيد التجهيز.');
+    const key = 'inventoryPassword';
+    const row = await ctx.db.query('attempts').withIndex('by_key', q => q.eq('key', key)).unique();
+    const now = Date.now();
+    if (row && now - row.start < 15 * 60_000 && row.count >= 5) return null;
+    if (!row) await ctx.db.insert('attempts', { key, start: now, count: 1 });
+    else await ctx.db.patch(row._id, now - row.start >= 15 * 60_000 ? { start: now, count: 1 } : { count: row.count + 1 });
+    return { salt: config.inventorySalt, pinHash: config.inventoryHash, version: config.inventoryVersion };
+  },
+});
+export const initializeInventory = internalMutation({
+  args: { salt: v.string(), pinHash: v.string() },
+  handler: async (ctx, args) => {
+    const config = await settings(ctx);
+    // Refuse partial as well as fully initialized credentials; never reset an existing password.
+    if (config.inventorySalt !== undefined || config.inventoryHash !== undefined || config.inventoryVersion !== undefined) return false;
+    await ctx.db.patch(config._id, { inventorySalt: args.salt, inventoryHash: args.pinHash, inventoryVersion: 1 });
+    return true;
+  },
+});
+export const finishInventoryLogin = internalMutation({
+  args: { token: v.string(), version: v.number(), digest: v.string() },
+  handler: async (ctx, args) => {
+    const active = await requireSession(ctx, args.token);
+    const config = await settings(ctx);
+    if (config.inventoryVersion !== args.version) throw new ConvexError('تغيّرت كلمة سر المخزن. حاول مجددًا.');
+    await ctx.db.insert('inventorySessions', { digest: args.digest, session: active._id, version: args.version, expires: active.expires });
+    const limit = await ctx.db.query('attempts').withIndex('by_key', q => q.eq('key', 'inventoryPassword')).unique();
+    if (limit) await ctx.db.delete(limit._id);
+  },
+});
+export const replaceInventoryPassword = internalMutation({
+  args: { token: v.string(), version: v.number(), salt: v.string(), pinHash: v.string() },
+  handler: async (ctx, args) => {
+    await requireSession(ctx, args.token);
+    const config = await settings(ctx);
+    if (config.inventoryVersion !== args.version) throw new ConvexError('تغيّرت كلمة سر المخزن. حاول مجددًا.');
+    await ctx.db.patch(config._id, { inventorySalt: args.salt, inventoryHash: args.pinHash, inventoryVersion: args.version + 1 });
+    const limit = await ctx.db.query('attempts').withIndex('by_key', q => q.eq('key', 'inventoryPassword')).unique();
+    if (limit) await ctx.db.delete(limit._id);
+  },
+});

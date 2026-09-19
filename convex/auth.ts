@@ -50,3 +50,38 @@ export const bootstrap = internalAction({
     return { initialized: await ctx.runMutation(internal.authState.initialize, credentials(pin)) };
   },
 });
+
+const validInventoryPassword = (password: string) => password.length >= 4 && password.length <= 64 && password.trim().length > 0;
+const verifyInventory = (password: string, reserved: { salt: string; pinHash: string }) => validInventoryPassword(password) && timingSafeEqual(derive(password, reserved.salt), Buffer.from(reserved.pinHash, 'hex'));
+export const unlockInventory = action({
+  args: { token: v.string(), password: v.string() },
+  handler: async (ctx, { token, password }): Promise<{ inventoryToken: string }> => {
+    const reserved = await ctx.runMutation(internal.authState.reserveInventory, { token });
+    if (!reserved) throw new ConvexError('محاولات كثيرة. حاول بعد 15 دقيقة.');
+    if (!verifyInventory(password, reserved)) throw new ConvexError('كلمة سر المخزن غير صحيحة.');
+    const next = newSession();
+    await ctx.runMutation(internal.authState.finishInventoryLogin, { token, version: reserved.version, digest: next.digest });
+    return { inventoryToken: next.token };
+  },
+});
+export const changeInventoryPassword = action({
+  args: { token: v.string(), currentPassword: v.string(), newPassword: v.string(), confirmation: v.string() },
+  handler: async (ctx, args): Promise<null> => {
+    const reserved = await ctx.runMutation(internal.authState.reserveInventory, { token: args.token });
+    if (!reserved) throw new ConvexError('محاولات كثيرة. حاول بعد 15 دقيقة.');
+    if (!verifyInventory(args.currentPassword, reserved)) throw new ConvexError('كلمة سر المخزن القديمة غير صحيحة.');
+    if (!validInventoryPassword(args.newPassword)) throw new ConvexError('اكتب كلمة سر من 4 إلى 64 حرفًا.');
+    if (args.newPassword !== args.confirmation) throw new ConvexError('تأكيد كلمة السر غير مطابق.');
+    await ctx.runMutation(internal.authState.replaceInventoryPassword, { token: args.token, version: reserved.version, ...credentials(args.newPassword) });
+    return null;
+  },
+});
+// Run only during an explicitly approved deployment, after configuring the private environment value.
+export const bootstrapInventory = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ initialized: boolean }> => {
+    const password = process.env.INITIAL_INVENTORY_PASSWORD ?? '';
+    if (!validInventoryPassword(password)) throw new ConvexError('INITIAL_INVENTORY_PASSWORD is not configured.');
+    return { initialized: await ctx.runMutation(internal.authState.initializeInventory, credentials(password)) };
+  },
+});

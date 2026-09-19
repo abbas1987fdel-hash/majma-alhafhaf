@@ -20,3 +20,16 @@ export async function requireSession(ctx: QueryCtx, token: string) {
   if (!found) throw new ConvexError('انتهت الجلسة. أدخل رمز الدخول مجددًا.');
   return found;
 }
+export async function inventorySession(ctx: QueryCtx, token: string, inventoryToken: string) {
+  const active = await session(ctx, token);
+  if (!active || !/^[a-f0-9]{64}$/.test(inventoryToken)) return null;
+  const found = await ctx.db.query('inventorySessions').withIndex('by_digest', q => q.eq('digest', digest(inventoryToken))).unique();
+  if (!found || found.session !== active._id || found.expires <= Date.now()) return null;
+  const config = await settings(ctx);
+  return config.inventoryVersion !== undefined && found.version === config.inventoryVersion ? found : null;
+}
+export async function requireInventorySession(ctx: QueryCtx, token: string, inventoryToken?: string) {
+  const found = await inventorySession(ctx, token, inventoryToken ?? '');
+  if (!found) throw new ConvexError('أدخل كلمة سر المخزن أولًا.');
+  return found;
+}
