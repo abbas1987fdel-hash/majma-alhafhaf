@@ -1,4 +1,5 @@
 'use client';
+import { NotebookPanel } from './notebook';
 import BrandImage from './brand-image';
 import { SyncStatus } from './sync-status';
 import { InventoryGate } from './inventory-access';
@@ -20,6 +21,7 @@ import {
   Sun,
   BellRing,
   Settings,
+  NotebookPen,
   Check,
   ReceiptText,
   ArrowDownLeft,
@@ -153,6 +155,7 @@ function LedgerApp() {
     catch (error) { (inForm ? setError : setNotice)(friendlyError(error)); }
     finally { setBusy(false); }
   }
+  const [noteDraft, setNoteDraft] = useState<{ id: string; value: string; version: Customer['version'] } | null>(null);
   const [dark, setDark] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -360,12 +363,7 @@ function LedgerApp() {
     shareMessage('https://wa.me/' + phone + '?text=' + encodeURIComponent(text));
   }
   function shareMessage(url: string) {
-    const target = new URL(url);
-    const logo = new URL(prefs.logo, window.location.href);
-    if (logo.protocol === 'https:' || logo.protocol === 'http:') {
-      target.searchParams.set('text', (target.searchParams.get('text') || '') + '\n\n' + logo.href);
-    }
-    window.open(target.href, '_blank', 'noopener,noreferrer');
+    window.open(url, '_blank', 'noopener,noreferrer');
   }
   const empty = (
     icon: ReactNode,
@@ -732,12 +730,6 @@ function LedgerApp() {
                   </div>
                   <span className="badge">حساب الزبون</span>
                 </div>
-                {customer.notes && (
-                  <aside className="customer-notes">
-                    <strong>ملاحظات الزبون</strong>
-                    <p>{customer.notes}</p>
-                  </aside>
-                )}
                 <section className="balance">
                   <span>الدين الكلي</span>
                   <strong>
@@ -747,6 +739,24 @@ function LedgerApp() {
                     <span />{' '}
                     {debt ? 'الرصيد المستحق حاليًا' : 'الحساب مسدّد بالكامل'}
                   </span>
+                  <form className="account-note" key={customer.id} onSubmit={async event => {
+                    event.preventDefault();
+                    if (!noteDraft || noteDraft.id !== customer.id) return;
+                    const notes = noteDraft.value.trim();
+                    await persist(() => prefs.saveCustomer({ token: prefs.token,
+                      customer: { id: customer.id, name: customer.name, phone: customer.phone, notes },
+                      expectedVersion: noteDraft.version }), () => { setNoteDraft(null); setNotice(''); }, false);
+                  }}>
+                    <label htmlFor="account-note">ملاحظة الزبون</label>
+                    <textarea id="account-note" maxLength={500} rows={2} placeholder="اكتب ملاحظة عن الزبون…"
+                      disabled={busy}
+                      value={noteDraft?.id === customer.id ? noteDraft.value : customer.notes || ''}
+                      onChange={event => setNoteDraft({ id: customer.id, value: event.target.value,
+                        version: noteDraft?.id === customer.id ? noteDraft.version : customer.version })} />
+                    <button className="soft" type="submit" disabled={busy || !prefs.canWrite || noteDraft?.id !== customer.id}>
+                      <Check size={16} /> {busy ? 'جارٍ الحفظ…' : 'حفظ الملاحظة'}
+                    </button>
+                  </form>
                   <Wallet className="balance-art" />
                 </section>
                 {editor ? (
@@ -1105,6 +1115,7 @@ function LedgerApp() {
               )
             )}
           </TabsContent>
+          <TabsContent value="notes">{tab === 'notes' && <NotebookPanel />}</TabsContent>
           <TabsContent value="settings">
             <SettingsPanel prefs={prefs} />
           </TabsContent>
@@ -1130,6 +1141,7 @@ function LedgerApp() {
                 )}
               </span>
             </TabsTrigger>
+            <TabsTrigger value="notes"><NotebookPen /><span>الملاحظة</span></TabsTrigger>
             <TabsTrigger value="settings">
               <Settings />
               <span>الإعدادات</span>

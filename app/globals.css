@@ -1665,3 +1665,39 @@ label textarea {
 .sync-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .dark .sync-status { background: #182637; border-color: #38516b; color: #d2e5f8; }
 .dark .sync-status input { background: #101723; color: #f1f5f9; }
+
+.account-note { position: relative; z-index: 1; margin-top: 18px; max-width: 440px; display: grid; gap: 8px; }
+.account-note label { color: #dce8ff; font-size: 13px; }
+.account-note textarea { width: 100%; min-height: 72px; resize: vertical; border: 1px solid #7a96b8; border-radius: 12px; padding: 10px 12px; background: #132d4d; color: #fff; font: inherit; }
+.account-note textarea::placeholder { color: #bdcfe5; }
+.account-note button { justify-self: start; display: flex; align-items: center; gap: 6px; }
+.account-note button:disabled { opacity: .55; cursor: not-allowed; }
+
+.notebook-folders { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.notebook-folder { border: 1px solid #8698ad55; border-radius: 18px; padding: 12px; background: #7b997c12; }
+.folder-open { width: 100%; min-height: 150px; display: flex; flex-direction: column; align-items:center; justify-content:center; gap: 12px; overflow-wrap:anywhere; }
+.folder-open svg { color: #82aa80; }
+.notebook-folder .actions { justify-content:center; }
+.notebook-editor { display: grid; gap: 14px; margin-bottom: 18px; }
+.notebook-editor label { display: grid; gap: 7px; }
+.notebook-editor input,.notebook-editor textarea { width:100%; padding:12px; border:1px solid #8393aa88; border-radius:12px; background:transparent; color:inherit; font:inherit; }
+.notebook-note p { white-space:pre-wrap; overflow-wrap:anywhere; margin:16px 0; }
+.notebook-note time,.notebook-note small { color:#8295ad; font-size:12px; }
+.notebook-note .actions { margin-top:14px; }
+.bottom-tabs { grid-template-columns:repeat(6,minmax(0,1fr)); }
+@media(max-width:480px) { .bottom-tabs { gap:0; padding-inline:4px; } .bottom-tabs [role=tab] { min-width:0; padding-inline:3px; font-size:10px; } .notebook .section-heading { gap:8px; } .notebook .section-heading .primary { font-size:12px; padding:10px; } }
+.bottom-tabs { display:grid !important; grid-template-columns:repeat(6,minmax(0,1fr)); }
+@media(max-width:480px) { .bottom-tabs { gap:2px !important; padding:5px !important; } .bottom-tabs [data-slot='tabs-trigger'] { min-width:0; padding-inline:1px !important; font-size:10px !important; } }
+
+.notebook-list { display:flex; flex-direction:column; gap:8px; }
+.notebook-list .notebook-note { width:100%; margin:0; padding:12px 14px; border-radius:12px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.notebook-note-copy { flex:1; min-width:0; }
+.notebook-note-copy h3 { font-size:15px; margin:0 0 3px; overflow-wrap:anywhere; }
+.notebook-note-copy p { font-size:13px; line-height:1.6; margin:5px 0 0; }
+.notebook-note-copy time,.notebook-note-copy small { font-size:10px; }
+.notebook-list .notebook-note .actions { margin:0; flex-shrink:0; gap:6px; }
+.notebook-list .notebook-note .actions button { padding:7px 9px; min-height:34px; border-radius:9px; font-size:11px; display:flex; align-items:center; gap:4px; }
+@media(max-width:420px) { .notebook-list .notebook-note .actions { flex-direction:column; } }
+
+.notebook .notebook-search { min-height: 40px; padding: 7px 12px; margin-bottom: 12px; gap: 8px; }
+.notebook .notebook-search input { font-size: 13px; }

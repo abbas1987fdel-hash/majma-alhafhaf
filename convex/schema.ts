@@ -5,6 +5,8 @@ export const customerFields = { id: v.string(), name: v.string(), phone: v.strin
 export const productFields = { id: v.string(), name: v.string(), buy: v.number(), sell: v.number(), quantity: v.number(), alert: v.number() };
 export const transactionFields = { id: v.string(), customer: v.string(), type: v.union(v.literal('debt'), v.literal('payment')), items: v.array(v.object({ name: v.string(), price: v.number() })), amount: v.number(), date: v.string(), dueDate: v.optional(v.string()) };
 export default defineSchema({
+  noteFolders: defineTable({ name: v.string(), version: v.number(), createdAt: v.number() }),
+  notebookNotes: defineTable({ folder: v.id('noteFolders'), title: v.string(), body: v.string(), createdAt: v.number(), updatedAt: v.number(), version: v.number() }).index('by_folder', ['folder']),
   operationReceipts: defineTable({ operationId: v.string(), fingerprint: v.string() }).index('by_operation_id', ['operationId']),
   customers: defineTable({ ...customerFields, version: v.number() }).index('by_client_id', ['id']),
   products: defineTable({ ...productFields, version: v.number() }).index('by_client_id', ['id']),

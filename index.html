@@ -29,19 +29,24 @@
       </div>
     </div>
     <script>
-      (() => {
+      (function () {
+        // Keep this guard ES5-compatible: it must run even when modules cannot.
+        if (!('noModule' in document.createElement('script'))) {
+          document.getElementById('startup-message').textContent = 'هذا المتصفح قديم ولا يدعم تشغيل التطبيق أو تثبيته. افتح نفس الرابط في إصدار حديث من Microsoft Edge أو Google Chrome.';
+          return;
+        }
         function showFailure() {
-          const message = document.getElementById('startup-message');
-          const retry = document.getElementById('startup-retry');
+          var message = document.getElementById('startup-message');
+          var retry = document.getElementById('startup-retry');
           if (!message || !retry) return;
           message.textContent = 'تعذّر فتح التطبيق. اتصل بالإنترنت عند الفتح الأول، ثم أعد المحاولة.';
           retry.hidden = false;
         }
-        const timeout = setTimeout(showFailure, 15000);
+        var timeout = setTimeout(showFailure, 15000);
         function handleFailure() { showFailure(); }
         window.addEventListener('error', handleFailure, true);
         window.addEventListener('unhandledrejection', handleFailure);
-        window.addEventListener('hafhaf:ready', () => {
+        window.addEventListener('hafhaf:ready', function () {
           clearTimeout(timeout);
           window.removeEventListener('error', handleFailure, true);
           window.removeEventListener('unhandledrejection', handleFailure);

@@ -210,3 +210,24 @@ describe('independent inventory password', () => {
     expect(await t.query(api.shop.inventory, { token, ...again })).toBeNull();
   });
 });
+
+describe('notebook folders and notes', () => {
+ it('requires login and preserves creation date while rejecting stale edits and nonempty folder deletion', async () => {
+  const {t,token}=await setup();
+  await expect(t.query(api.shop.notebook,{token:''})).rejects.toThrow();
+  await expect(t.mutation(api.shop.saveNoteFolder,{token:'',name:'مجلد'})).rejects.toThrow();
+  const folder=await t.mutation(api.shop.saveNoteFolder,{token,name:'الصيانة'});
+  const id=await t.mutation(api.shop.saveNotebookNote,{token,folder,title:'موعد',body:'الخميس'});
+  const first=(await t.query(api.shop.notebook,{token})).notes[0];
+  await t.mutation(api.shop.saveNotebookNote,{token,id,folder,title:'موعد جديد',body:'الجمعة',expectedVersion:1});
+  const next=(await t.query(api.shop.notebook,{token})).notes[0];
+  expect(next).toMatchObject({createdAt:first.createdAt,body:'الجمعة',version:2});
+  await expect(t.mutation(api.shop.saveNotebookNote,{token,id,folder,title:'قديم',body:'',expectedVersion:1})).rejects.toThrow();
+  await expect(t.mutation(api.shop.deleteNoteFolder,{token,id:folder,expectedVersion:1})).rejects.toThrow();
+  await expect(t.mutation(api.shop.deleteNotebookNote,{token:'',id,expectedVersion:2})).rejects.toThrow();
+  await t.mutation(api.shop.deleteNotebookNote,{token,id,expectedVersion:2});
+  await t.mutation(api.shop.deleteNoteFolder,{token,id:folder,expectedVersion:1});
+  expect(await t.query(api.shop.notebook,{token})).toEqual({folders:[],notes:[]});
+  await expect(t.mutation(api.shop.saveNotebookNote,{token,folder,title:'محذوف',body:''})).rejects.toThrow();
+ });
+});

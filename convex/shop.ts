@@ -208,3 +208,46 @@ export const logout = mutation({
     if (active) await ctx.db.delete(active._id);
   },
 });
+
+export const notebook = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireSession(ctx, token);
+    return { folders: await ctx.db.query('noteFolders').collect(), notes: await ctx.db.query('notebookNotes').collect() };
+  },
+});
+export const saveNoteFolder = mutation({
+  args: { token: v.string(), id: v.optional(v.id('noteFolders')), name: v.string(), expectedVersion: v.optional(v.number()) },
+  handler: async (ctx, { token, id, name, expectedVersion }) => {
+    await requireSession(ctx, token);
+    const row = id ? await ctx.db.get(id) : null;
+    version(row, expectedVersion);
+    const value = { name: text(name, 'اسم المجلد', 100), version: (row?.version ?? 0) + 1, createdAt: row?.createdAt ?? Date.now() };
+    if (id) { if (!row) throw new ConvexError('المجلد غير موجود.'); await ctx.db.replace(id, value); return id; }
+    return await ctx.db.insert('noteFolders', value);
+  },
+});
+export const saveNotebookNote = mutation({
+  args: { token: v.string(), id: v.optional(v.id('notebookNotes')), folder: v.id('noteFolders'), title: v.string(), body: v.string(), expectedVersion: v.optional(v.number()) },
+  handler: async (ctx, { token, id, folder, title, body, expectedVersion }) => {
+    await requireSession(ctx, token);
+    if (!await ctx.db.get(folder)) throw new ConvexError('المجلد غير موجود.');
+    const row = id ? await ctx.db.get(id) : null;
+    version(row, expectedVersion);
+    const value = { folder, title: text(title, 'عنوان الملاحظة', 160), body: text(body, 'الملاحظة', 10000, true), version: (row?.version ?? 0) + 1, createdAt: row?.createdAt ?? Date.now(), updatedAt: Date.now() };
+    if (id) { if (!row) throw new ConvexError('الملاحظة غير موجودة.'); await ctx.db.replace(id, value); return id; }
+    return await ctx.db.insert('notebookNotes', value);
+  },
+});
+export const deleteNotebookNote = mutation({
+  args: { token: v.string(), id: v.id('notebookNotes'), expectedVersion: v.number() },
+  handler: async (ctx, { token, id, expectedVersion }) => { await requireSession(ctx, token); const row = await ctx.db.get(id); version(row, expectedVersion); await ctx.db.delete(id); },
+});
+export const deleteNoteFolder = mutation({
+  args: { token: v.string(), id: v.id('noteFolders'), expectedVersion: v.number() },
+  handler: async (ctx, { token, id, expectedVersion }) => {
+    await requireSession(ctx, token); const row = await ctx.db.get(id); version(row, expectedVersion);
+    if (await ctx.db.query('notebookNotes').withIndex('by_folder', q => q.eq('folder', id)).first()) throw new ConvexError('احذف ملاحظات المجلد أولًا.');
+    await ctx.db.delete(id);
+  },
+});
