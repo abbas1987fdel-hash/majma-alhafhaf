@@ -172,6 +172,7 @@ function LedgerApp() {
     return () => document.documentElement.classList.remove('dark');
   }, [dark]);
   const [tab, setTab] = useState('customers');
+  const [notebookDirty, setNotebookDirty] = useState(false);
   const [inventorySearch, setInventorySearch] = useState('');
   const filteredProducts = products.filter((p) =>
     matchesName(p.name, inventorySearch),
@@ -216,6 +217,7 @@ function LedgerApp() {
       setForm(f);
     };
   function changeTab(v: unknown) {
+    if (tab === 'notes' && String(v) !== tab && notebookDirty && !window.confirm('لديك كتابة غير محفوظة. هل تريد الخروج دون حفظ؟')) return;
     if (String(v) !== tab && !prefs.lockInventory()) return;
     setTab(String(v));
     setSearch('');
@@ -1115,7 +1117,7 @@ function LedgerApp() {
               )
             )}
           </TabsContent>
-          <TabsContent value="notes">{tab === 'notes' && <NotebookPanel />}</TabsContent>
+          <TabsContent value="notes">{tab === 'notes' && <NotebookPanel onDirtyChange={setNotebookDirty} />}</TabsContent>
           <TabsContent value="settings">
             <SettingsPanel prefs={prefs} />
           </TabsContent>

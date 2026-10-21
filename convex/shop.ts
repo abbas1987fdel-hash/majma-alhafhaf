@@ -223,7 +223,7 @@ export const saveNoteFolder = mutation({
     const row = id ? await ctx.db.get(id) : null;
     version(row, expectedVersion);
     const value = { name: text(name, 'اسم المجلد', 100), version: (row?.version ?? 0) + 1, createdAt: row?.createdAt ?? Date.now() };
-    if (id) { if (!row) throw new ConvexError('المجلد غير موجود.'); await ctx.db.replace(id, value); return id; }
+    if (id) { if (!row) throw new ConvexError('المجلد غير موجود.'); await ctx.db.patch(id, value); return id; }
     return await ctx.db.insert('noteFolders', value);
   },
 });
@@ -231,8 +231,14 @@ export const saveNotebookNote = mutation({
   args: { token: v.string(), id: v.optional(v.id('notebookNotes')), folder: v.id('noteFolders'), title: v.string(), body: v.string(), expectedVersion: v.optional(v.number()) },
   handler: async (ctx, { token, id, folder, title, body, expectedVersion }) => {
     await requireSession(ctx, token);
-    if (!await ctx.db.get(folder)) throw new ConvexError('المجلد غير موجود.');
+    const parent = await ctx.db.get(folder);
+    if (!parent) throw new ConvexError('المجلد غير موجود.');
+    if (parent.body !== undefined) throw new ConvexError('حدّث التطبيق لتعديل صفحة الملاحظات.');
     const row = id ? await ctx.db.get(id) : null;
+    if (row) {
+      const previous = await ctx.db.get(row.folder);
+      if (previous?.body !== undefined) throw new ConvexError('حدّث التطبيق لتعديل صفحة الملاحظات.');
+    }
     version(row, expectedVersion);
     const value = { folder, title: text(title, 'عنوان الملاحظة', 160), body: text(body, 'الملاحظة', 10000, true), version: (row?.version ?? 0) + 1, createdAt: row?.createdAt ?? Date.now(), updatedAt: Date.now() };
     if (id) { if (!row) throw new ConvexError('الملاحظة غير موجودة.'); await ctx.db.replace(id, value); return id; }
@@ -241,13 +247,39 @@ export const saveNotebookNote = mutation({
 });
 export const deleteNotebookNote = mutation({
   args: { token: v.string(), id: v.id('notebookNotes'), expectedVersion: v.number() },
-  handler: async (ctx, { token, id, expectedVersion }) => { await requireSession(ctx, token); const row = await ctx.db.get(id); version(row, expectedVersion); await ctx.db.delete(id); },
+  handler: async (ctx, { token, id, expectedVersion }) => {
+    await requireSession(ctx, token); const row = await ctx.db.get(id); version(row, expectedVersion);
+    if (row && (await ctx.db.get(row.folder))?.body !== undefined) throw new ConvexError('حدّث التطبيق لتعديل صفحة الملاحظات.');
+    await ctx.db.delete(id);
+  },
 });
 export const deleteNoteFolder = mutation({
   args: { token: v.string(), id: v.id('noteFolders'), expectedVersion: v.number() },
   handler: async (ctx, { token, id, expectedVersion }) => {
     await requireSession(ctx, token); const row = await ctx.db.get(id); version(row, expectedVersion);
+    if (row?.body?.trim()) throw new ConvexError('امسح نص الحافظة واحفظه قبل حذفها.');
     if (await ctx.db.query('notebookNotes').withIndex('by_folder', q => q.eq('folder', id)).first()) throw new ConvexError('احذف ملاحظات المجلد أولًا.');
     await ctx.db.delete(id);
+  },
+});
+
+export const saveNotebookPage = mutation({
+  args: { token: v.string(), folder: v.id('noteFolders'), body: v.string(), expectedVersion: v.number(),
+    legacyVersions: v.array(v.object({ id: v.id('notebookNotes'), version: v.number() })) },
+  handler: async (ctx, { token, folder, body, expectedVersion, legacyVersions }) => {
+    await requireSession(ctx, token);
+    const row = await ctx.db.get(folder);
+    if (!row) throw new ConvexError('المجلد غير موجود.');
+    version(row, expectedVersion);
+    if (body.length > 200000) throw new ConvexError('نص الحافظة طويل جدًا، الحد 200000 حرف.');
+    if (row.body === undefined) {
+      const notes = await ctx.db.query('notebookNotes').withIndex('by_folder', q => q.eq('folder', folder)).collect();
+      const versions = new Map(legacyVersions.map(note => [note.id, note.version]));
+      if (notes.length !== versions.size || notes.some(note => versions.get(note._id) !== note.version)) {
+        throw new ConvexError('تغيّرت الملاحظات من جهاز آخر. احتفظ بنصك ثم أعد فتح الحافظة.');
+      }
+    }
+    // Preserve whitespace, manual separators, and all original note records.
+    await ctx.db.patch(folder, { body, version: row.version + 1 });
   },
 });

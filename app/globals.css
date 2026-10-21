@@ -1701,3 +1701,10 @@ label textarea {
 
 .notebook .notebook-search { min-height: 40px; padding: 7px 12px; margin-bottom: 12px; gap: 8px; }
 .notebook .notebook-search input { font-size: 13px; }
+
+.notebook-page textarea { width:100%; min-height:55vh; resize:vertical; padding:20px; border:1px solid #cbd5e1; border-radius:16px; background:#fff; color:#183253; font:inherit; font-size:17px; line-height:2; white-space:pre-wrap; }
+.dark .notebook-page textarea { background:#192637; border-color:#334863; color:#e5edf8; }
+.notebook-page-save { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px 0; margin-bottom:28px; }
+.notebook-page-save span { color:var(--muted); font-size:12px; }
+.notebook-page-save button { display:flex; align-items:center; gap:6px; }
+.notebook-search .soft { padding:5px 12px; flex-shrink:0; }

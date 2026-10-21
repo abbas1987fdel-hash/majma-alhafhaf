@@ -231,3 +231,37 @@ describe('notebook folders and notes', () => {
   await expect(t.mutation(api.shop.saveNotebookNote,{token,folder,title:'محذوف',body:''})).rejects.toThrow();
  });
 });
+
+describe('single notebook page', () => {
+ it('preserves manual line breaks, old records, and body on folder rename; rejects stale saves and old-client edits', async () => {
+  const {t,token}=await setup();
+  const folder=await t.mutation(api.shop.saveNoteFolder,{token,name:'المخزن'});
+  const id=await t.mutation(api.shop.saveNotebookNote,{token,folder,title:'عكس صوندة',body:'قطعتان'});
+  const args={token,folder,body:'عكس صوندة\n____________\nملاحظات اليوم. مغسلة\n\n',expectedVersion:1,legacyVersions:[{id,version:1}]};
+  await expect(t.mutation(api.shop.saveNotebookPage,{...args,token:''})).rejects.toThrow();
+  await t.mutation(api.shop.saveNotebookPage,args);
+  let result=await t.query(api.shop.notebook,{token});
+  expect(result.folders[0]).toMatchObject({body:args.body,version:2});
+  expect(result.notes[0]).toMatchObject({_id:id,body:'قطعتان'});
+  await expect(t.mutation(api.shop.saveNotebookPage,args)).rejects.toThrow();
+  await expect(t.mutation(api.shop.saveNotebookNote,{token,folder,title:'جديد',body:'قديم'})).rejects.toThrow('حدّث');
+  await expect(t.mutation(api.shop.deleteNotebookNote,{token,id,expectedVersion:1})).rejects.toThrow('حدّث');
+  await t.mutation(api.shop.saveNoteFolder,{token,id:folder,name:'حافظة',expectedVersion:2});
+  result=await t.query(api.shop.notebook,{token});
+  expect(result.folders[0].body).toBe(args.body);
+  await expect(t.mutation(api.shop.deleteNoteFolder,{token,id:folder,expectedVersion:3})).rejects.toThrow();
+  await t.mutation(api.shop.saveNotebookPage,{...args,body:'',expectedVersion:3});
+  expect((await t.query(api.shop.notebook,{token})).folders[0].body).toBe('');
+ });
+ it('rejects conversion if another device edits or adds an old note', async () => {
+  const {t,token}=await setup();
+  const folder=await t.mutation(api.shop.saveNoteFolder,{token,name:'صيانة'});
+  const id=await t.mutation(api.shop.saveNotebookNote,{token,folder,title:'أ',body:'أ'});
+  const args={token,folder,body:'نصي',expectedVersion:1,legacyVersions:[{id,version:1}]};
+  await t.mutation(api.shop.saveNotebookNote,{token,id,folder,title:'أ',body:'تعديل آخر',expectedVersion:1});
+  await expect(t.mutation(api.shop.saveNotebookPage,args)).rejects.toThrow('تغيّرت');
+  await t.mutation(api.shop.saveNotebookNote,{token,folder,title:'ب',body:'جديد'});
+  await expect(t.mutation(api.shop.saveNotebookPage,{...args,legacyVersions:[{id,version:2}]})).rejects.toThrow('تغيّرت');
+  expect((await t.query(api.shop.notebook,{token})).folders[0].body).toBeUndefined();
+ });
+});
