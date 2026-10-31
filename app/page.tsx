@@ -1,4 +1,5 @@
 'use client';
+import { BulkPrices } from './bulk-prices';
 import { NotebookPanel } from './notebook';
 import BrandImage from './brand-image';
 import { SyncStatus } from './sync-status';
@@ -586,6 +587,7 @@ function LedgerApp() {
                 <Plus size={18} /> إضافة مادة
               </button>
             </div>
+            <BulkPrices />
             <div className="search">
               <Search size={20} />
               <input

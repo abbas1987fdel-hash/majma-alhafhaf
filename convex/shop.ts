@@ -1,3 +1,4 @@
+import { increasedPrice } from '../lib/price-adjustment';
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
@@ -282,4 +283,19 @@ export const saveNotebookPage = mutation({
     // Preserve whitespace, manual separators, and all original note records.
     await ctx.db.patch(folder, { body, version: row.version + 1 });
   },
+});
+
+export const increasePrices = mutation({
+ args:{token:v.string(),inventoryToken:v.string(),operationId:v.string(),buyPercent:v.number(),sellPercent:v.number(),expected:v.array(v.object({id:v.string(),version:v.number()}))},
+ handler:async(ctx,{token,inventoryToken,operationId,...args})=>{
+ await requireInventorySession(ctx,token,inventoryToken);
+ const replay=await receipt(ctx,operationId,'increasePrices',args);if(replay.repeated)return;
+ try{increasedPrice(0,args.buyPercent);increasedPrice(0,args.sellPercent);}catch{throw new ConvexError('تحقق من نسب الزيادة.');}
+ if(!args.buyPercent&&!args.sellPercent)throw new ConvexError('أدخل نسبة زيادة أكبر من صفر.');
+ const rows=await ctx.db.query('products').collect();const expected=new Map(args.expected.map(p=>[p.id,p.version]));
+ if(!rows.length||expected.size!==args.expected.length||rows.length!==expected.size||rows.some(p=>expected.get(p.id)!==p.version))throw new ConvexError('تغير المخزون من جهاز آخر. راجع الأسعار ثم حاول مجددًا.');
+ const changes=rows.map(p=>{try{return {row:p,buy:increasedPrice(p.buy,args.buyPercent),sell:increasedPrice(p.sell,args.sellPercent)}}catch{throw new ConvexError('السعر الناتج يتجاوز الحد المسموح.');}});
+ for(const {row,buy,sell} of changes)await ctx.db.patch(row._id,{buy,sell,version:row.version+1});
+ await replay.commit();
+ }
 });

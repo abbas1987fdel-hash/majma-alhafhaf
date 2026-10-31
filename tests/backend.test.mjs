@@ -265,3 +265,20 @@ describe('single notebook page', () => {
   expect((await t.query(api.shop.notebook,{token})).folders[0].body).toBeUndefined();
  });
 });
+
+describe('bulk inventory price increases',()=>{
+ it('atomically increases prices, preserves quantities and rejects stale or unauthorized requests',async()=>{
+ const {t,token}=await setup();await t.action(internal.auth.bootstrapInventory,{});const {inventoryToken}=await t.action(api.auth.unlockInventory,{token,password:inventoryPassword});
+ const product={id:'product-bulk01',name:'Item',buy:500,sell:1000,quantity:7,alert:2};
+ await t.mutation(api.shop.saveProduct,{token,inventoryToken,product});
+ const args={token,inventoryToken,operationId:'bulk-operation-01',buyPercent:10,sellPercent:20,expected:[{id:product.id,version:1}]};
+ await expect(t.mutation(api.shop.increasePrices,{...args,inventoryToken:'invalid'})).rejects.toThrow();
+ await t.mutation(api.shop.increasePrices,args);
+ await t.mutation(api.shop.increasePrices,args);
+ let p=(await t.query(api.shop.inventory,{token,inventoryToken})).products[0];expect(p).toMatchObject({buy:550,sell:1200,quantity:7,version:2});
+ await expect(t.mutation(api.shop.increasePrices,{...args,operationId:'bulk-operation-02'})).rejects.toThrow();
+ await expect(t.mutation(api.shop.increasePrices,{...args,operationId:'bulk-operation-03',sellPercent:-1,expected:[{id:p.id,version:2}]})).rejects.toThrow();
+ await t.mutation(api.shop.increasePrices,{...args,operationId:'bulk-operation-04',buyPercent:0,sellPercent:2.5,expected:[{id:p.id,version:2}]});
+ p=(await t.query(api.shop.inventory,{token,inventoryToken})).products[0];expect(p).toMatchObject({buy:550,sell:1230,quantity:7});
+ });
+});

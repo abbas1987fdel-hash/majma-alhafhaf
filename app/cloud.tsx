@@ -297,7 +297,11 @@ function useCloudState() {
     }
     await saveSettingsMutation({ token: serverToken, name: nextName, intro: nextIntro, ...(logoId ? { logoId } : {}) });
   }
-  return { token, data, name, intro, logo, logoFile, login, loginLocal, lock, changePin, saveSettings,
+  async function increasePrices(args: Omit<FunctionArgs<typeof api.shop.increasePrices>, 'token'|'inventoryToken'>) {
+    if(!connected || !serverInventoryToken || pending || syncBusy || syncConflict || inventoryNeedsLogin || inventoryUnchecked) throw new OfflineError('اتصل بالإنترنت وأكمل مزامنة المخزون قبل تعديل الأسعار.');
+    await client!.mutation(api.shop.increasePrices,{...args,token:serverToken,inventoryToken:serverInventoryToken});
+  }
+  return { increasePrices, token, data, name, intro, logo, logoFile, login, loginLocal, lock, changePin, saveSettings,
     inventory, inventoryToken, unlockInventory, unlockInventoryLocal, lockInventory, changeInventoryPassword, inventoryUnchecked, inventoryNeedsLogin, reconnectInventory,
     connected, canWrite: opened && !syncBusy && !syncConflict, pending, syncBusy, syncError, needsLogin, retrySync, exportPending, discardPending, reconnect,
     canDiscard: syncConflict && unsettled.current === 0 && !syncBusy,
