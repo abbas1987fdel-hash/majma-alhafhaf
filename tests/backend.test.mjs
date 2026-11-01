@@ -282,3 +282,16 @@ describe('bulk inventory price increases',()=>{
  p=(await t.query(api.shop.inventory,{token,inventoryToken})).products[0];expect(p).toMatchObject({buy:550,sell:1230,quantity:7});
  });
 });
+
+it('reduces buy and sell independently, accepts fractions, and never permits negative prices',async()=>{
+ const {t,token}=await setup();await t.action(internal.auth.bootstrapInventory,{});const {inventoryToken}=await t.action(api.auth.unlockInventory,{token,password:inventoryPassword});
+ const product={id:'product-discount1',name:'Item',buy:500,sell:1000,quantity:7,alert:2};await t.mutation(api.shop.saveProduct,{token,inventoryToken,product});
+ const args={token,inventoryToken,operationId:'discount-operation-01',decrease:true,buyPercent:0,sellPercent:10,expected:[{id:product.id,version:1}]};
+ await t.mutation(api.shop.increasePrices,args);await t.mutation(api.shop.increasePrices,args);
+ let p=(await t.query(api.shop.inventory,{token,inventoryToken})).products[0];expect(p).toMatchObject({buy:500,sell:900,quantity:7,version:2});
+ for(const value of [-1,101])await expect(t.mutation(api.shop.increasePrices,{...args,operationId:'discount-invalid-01',buyPercent:value,expected:[{id:p.id,version:2}]})).rejects.toThrow();
+ await t.mutation(api.shop.increasePrices,{...args,operationId:'discount-operation-02',buyPercent:2.5,sellPercent:0,expected:[{id:p.id,version:2}]});
+ p=(await t.query(api.shop.inventory,{token,inventoryToken})).products[0];expect(p).toMatchObject({buy:488,sell:900,quantity:7});
+ await t.mutation(api.shop.increasePrices,{...args,operationId:'discount-operation-03',buyPercent:100,sellPercent:100,expected:[{id:p.id,version:3}]});
+ p=(await t.query(api.shop.inventory,{token,inventoryToken})).products[0];expect(p).toMatchObject({buy:0,sell:0,quantity:7});
+});

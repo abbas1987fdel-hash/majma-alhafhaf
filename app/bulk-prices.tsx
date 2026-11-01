@@ -1,8 +1,18 @@
 import { ConvexError } from 'convex/values';
 import { useState } from 'react';
 import { useCloud, friendlyError } from './cloud';
-import { increasedPrice } from '../lib/price-adjustment';
+import { increasedPrice, decreasedPrice } from '../lib/price-adjustment';
 export function BulkPrices() {
+  return (
+    <>
+      <PriceForm />
+      <PriceForm decrease />
+    </>
+  );
+}
+function PriceForm({ decrease = false }: { decrease?: boolean }) {
+  const label = decrease ? 'تخفيض' : 'زيادة';
+  const calculate = decrease ? decreasedPrice : increasedPrice;
   const cloud = useCloud();
   const products = cloud.inventory?.products ?? [];
   const [buy, setBuy] = useState(''),
@@ -17,8 +27,8 @@ export function BulkPrices() {
   let error = '';
   try {
     for (const p of products) {
-      increasedPrice(p.buy, bp);
-      increasedPrice(p.sell, sp);
+      calculate(p.buy, bp);
+      calculate(p.sell, sp);
     }
   } catch (e) {
     error = (e as Error).message;
@@ -33,13 +43,15 @@ export function BulkPrices() {
     if (busy || !allowed || error || (!bp && !sp)) return;
     if (
       !confirm(
-        'تأكيد زيادة أسعار ' +
+        'تأكيد ' +
+          label +
+          ' أسعار ' +
           products.length +
           ' مادة؟ الشراء ' +
           bp +
           '٪ والبيع ' +
           sp +
-          '٪. الزيادة على الأسعار الحالية، والفواتير السابقة لا تتغير.',
+          '٪. التعديل على الأسعار الحالية، والفواتير السابقة لا تتغير.',
       )
     )
       return;
@@ -47,6 +59,7 @@ export function BulkPrices() {
     setMessage('');
     try {
       const request = attempt ?? {
+        decrease,
         buyPercent: bp,
         sellPercent: sp,
         operationId: crypto.randomUUID(),
@@ -68,18 +81,18 @@ export function BulkPrices() {
   return (
     <section
       className="settings-card"
-      aria-label="زيادة أسعار المخزون"
+      aria-label={label + ' أسعار المخزون'}
       style={{ marginBottom: 20 }}
     >
-      <h3>زيادة أسعار جميع المواد (%)</h3>
+      <h3>{label} أسعار جميع المواد (%)</h3>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <label style={{ flex: '1 1 160px' }}>
-          زيادة سعر البيع (%)
+          {label} سعر البيع (%)
           <input
-            aria-label="نسبة زيادة سعر البيع"
+            aria-label={'نسبة ' + label + ' سعر البيع'}
             type="number"
             min="0"
-            max="10000"
+            max={decrease ? 100 : 10000}
             step="any"
             value={sell}
             disabled={busy || !!attempt}
@@ -89,12 +102,12 @@ export function BulkPrices() {
           />
         </label>
         <label style={{ flex: '1 1 160px' }}>
-          زيادة سعر الشراء (%)
+          {label} سعر الشراء (%)
           <input
-            aria-label="نسبة زيادة سعر الشراء"
+            aria-label={'نسبة ' + label + ' سعر الشراء'}
             type="number"
             min="0"
-            max="10000"
+            max={decrease ? 100 : 10000}
             step="any"
             value={buy}
             disabled={busy || !!attempt}
@@ -111,12 +124,12 @@ export function BulkPrices() {
         <p>
           معاينة «{products[0].name}»: البيع{' '}
           {products[0].sell.toLocaleString('ar-IQ')} ←{' '}
-          {increasedPrice(products[0].sell, sp).toLocaleString('ar-IQ')} د.ع،
-          الشراء {products[0].buy.toLocaleString('ar-IQ')} ←{' '}
-          {increasedPrice(products[0].buy, bp).toLocaleString('ar-IQ')} د.ع
+          {calculate(products[0].sell, sp).toLocaleString('ar-IQ')} د.ع، الشراء{' '}
+          {products[0].buy.toLocaleString('ar-IQ')} ←{' '}
+          {calculate(products[0].buy, bp).toLocaleString('ar-IQ')} د.ع
         </p>
       )}
-      {!allowed && <p>يلزم اتصال ومزامنة مكتملة لتطبيق الزيادة.</p>}
+      {!allowed && <p>يلزم اتصال ومزامنة مكتملة لتطبيق التعديل.</p>}
       <button
         className="primary"
         disabled={
@@ -124,7 +137,9 @@ export function BulkPrices() {
         }
         onClick={() => void apply()}
       >
-        {busy ? 'جارٍ تطبيق الزيادة…' : 'تطبيق الزيادة على جميع المواد'}
+        {busy
+          ? 'جارٍ تطبيق ' + label + '…'
+          : 'تطبيق ' + label + ' على جميع المواد'}
       </button>
       {(message || error) && <output>{error || message}</output>}
     </section>
